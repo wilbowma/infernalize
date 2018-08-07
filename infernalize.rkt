@@ -178,10 +178,16 @@
   ;; so doesn't appear any simpler.
 
   ;; Can we reduce all leaves to instances of A : Type, i.e., to variables of type Type?
-  (define-term let-f (λ (A : Type) (λ (x : A) (λ (B : Type) (λ (f : (Π (x : A) B)) (f x))))))
+  (define-term let-f
+    (λ (A : Type)
+      (λ (x : A)
+        ;; supports dependency in B
+        (λ (B : (Π (x : A) Type))
+          (λ (f : (Π (x : A) (B x)))
+            (f x))))))
+
   (define-metafunction infernalizeL
     [(let- ([x e]) e_0)
-     ;; doesn't support dependency in B
-     (let-f (infer e) e (infer e_0) (λ (x : (infer e)) e_0))
-     ])
- )
+     ;; Hm. Infer can't really work for terms in a context. Need turnstile like
+     ;; infer with ctx argument.
+     (let-f (infer e) e (?? (infer e_0) ...) (λ (x : (infer e)) e_0))]))
