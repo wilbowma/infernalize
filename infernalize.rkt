@@ -177,7 +177,7 @@
   ;; It looks like all "leaves" are either pattern variables or calls to infer,
   ;; so doesn't appear any simpler.
 
-  ;; Can we reduce all leaves to instances of A : Type, i.e., to variables of type Type?
+  ;; Can we reduce all leaves to instances of A : Type, i.e., to variables of type Type (or telescope over Type)?
   (define-term let-f
     (λ (A : Type)
       (λ (x : A)
@@ -188,6 +188,14 @@
 
   (define-metafunction infernalizeL
     [(let- ([x e]) e_0)
-     ;; Hm. Infer can't really work for terms in a context. Need turnstile like
-     ;; infer with ctx argument.
-     (let-f (infer e) e (?? (infer e_0) ...) (λ (x : (infer e)) e_0))]))
+     ((((let-f (infer e)) e) (infer (λ (x : (infer e)) e_0))) (λ (x : (infer e)) e_0))])
+
+  ;; Need to support this pattern; think that is sufficient
+  (displayln
+   (judgment-holds (type-infer Γ-test (infer (λ (x : (infer true)) x)) A) A))
+
+  (displayln
+   (judgment-holds (type-infer Γ-test (let- ([x true]) x) A) A))
+
+  (check-true
+   (judgment-holds (type-check Γ-test (let- ([x true]) x) Bool))))
