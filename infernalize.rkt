@@ -273,4 +273,110 @@
                                   Bool))))
 
   (check-true
-   (judgment-holds (type-check Γ-test (let- ([x true]) x) Bool))))
+   (judgment-holds (type-check Γ-test (let- ([x true]) x) Bool)))
+
+  #|
+  Okay, so this works.
+  Now, can we automagically turn function definitions into type rules, and if
+  so, is this some kind of advantage in terms of performance or error reporting?
+  E.g., given the type of let-f:
+  Γ ⊢ let-f : (Π (x_A : Type)
+                (Π (x : x_A)
+                  (Π (x_B : (Π (x_0 : x_A) Type))
+                    (Π (x_f : (Π (x_1 : x_A) (x_B x_1)))
+                      (x_B x)))))
+  Can we automatically derive:
+    Γ ⊢ e : A
+    Γ ⊢ f : (Π (x : A) B)
+    Γ,x:A ⊢ B : Type (redundant)
+    -------------------
+    Γ ⊢ let-f e f : B[e/x]
+
+  This would almost separate the concerns of expressing the macros from expressing new typing rules.
+
+  But how do we know which arguments are supposed to be surface and which are not?
+  If this is a modality of some kind, could use some tag on Types, e.g.,:
+    Γ ⊢ let-f : (Π (A : (Inferred Type))
+                  (Π (e : A)
+                    (Π (B : (Inferred (Π (x : A) Type)))
+                      (Π (f : (Π (x : A) (B x)))
+                        (B e)))))
+
+  (Hm. But then, how is this different than internalizing unification?)
+
+  Strategy: first, turn the telescope into a typing rule as follows
+
+  ⊢ A : Inferred Type
+  ⊢ e : A
+  ⊢ B : (Inferred (Π (x : A) Type))
+  ⊢ f : Π (x : A) (B x)
+  -----------------------
+  ⊢ let-f A e B f : (B e)
+
+  Next, remove Inferred arguments from the surface syntax
+
+  ⊢ A : Inferred Type
+  ⊢ e : A
+  ⊢ B : (Inferred (Π (x : A) Type))
+  ⊢ f : Π (x : A) (B x)
+  -------------------
+  ⊢ let-f e f : (B e)
+
+  Next, transform Inferred binding types into substitutions
+
+  ⊢ A : Inferred Type
+  ⊢ e : A
+  x' : A ⊢ B : Inferred Type
+  ⊢ f : Π (x : A) B[x/x']
+  -------------------
+  ⊢ let-f e f : B[e/x']
+
+  Remove all Inferred Types
+
+  ⊢ e : A
+  ⊢ f : Π (x : A) B[x/x']
+  -------------------
+  ⊢ let-f e f : B[e/x']
+
+
+  ... So this prevents any strange search, I suppose.
+  But what did that have to do with the infer term?
+  And the resulting syntax is still not the surface syntax.
+  Also, it was all at the meta-level, manipulating derivations.
+  Want to manipulate terms (or, types) as typing rules.
+
+  If we just suppose pattern-based macros, then how does `infer` simplify
+  the resugaring problem:
+
+  Goal: no unification, no manipulating derivations, no unification.
+    (let- ([x e]) e_0) =>
+    ((((let-f (infer e)) e) (λ (x : (infer e)) (infer e_0))) (λ (x : (infer e)) e_0))
+
+  Tells us the typing rule is:
+  ⊢ e : (infer e)
+  x : (infer e) ⊢ e_0 : (infer e_0)
+  ---------------------------------
+  ⊢ (let- ([x e]) e_0) : (infer ((((let-f (infer e)) e) (λ (x : (infer e)) (infer e_0))) (λ (x : (infer e)) e_0)))
+
+  (requires some knowledge of telescopes to transform lambdas into binding premises)
+
+  Need: some normalization step to remove (infer _)'s from generated typing rules
+  Think the logic is:
+  In a derivation D of the form
+     ⊢ e : (infer e) ....
+     ---------------------
+     .....
+     =>
+     ⊢ e : A .... [A/(infer e)] (fresh A)
+     -----------------------
+     ..... [A/(infer e)]
+  So we get
+  ⊢ e : A
+  x : A ⊢ e_0 : B
+  ---------------------------------
+  ⊢ (let- ([x e]) e_0) : (infer ((((let-f A) e) (λ (x : A) B)) (λ (x : A) e_0)))
+  |#
+  (displayln
+   ())
+
+  )
