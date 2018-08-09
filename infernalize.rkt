@@ -376,7 +376,9 @@
   ---------------------------------
   ⊢ (let- ([x e]) e_0) : (infer ((((let-f A) e) (λ (x : A) B)) (λ (x : A) e_0)))
   |#
+  ;; Need a little work on transforming telescopes
   (displayln
-   ())
+   (term (reduce ((((∅ A : Type) e : A) B : (Π (x : A) Type)) e_0 : (B e))
+                 (infer ((((let-f A) e) (λ (x : A) (B e))) (λ (x : A) e_0))))))
 
   )
