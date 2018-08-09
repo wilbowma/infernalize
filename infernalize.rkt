@@ -4,6 +4,8 @@
   redex/reduction-semantics)
 (provide (all-defined-out))
 
+(current-cache-all? #t)
+
 (define-language infernalizeL
   (e t ::= x
      Type
@@ -18,32 +20,81 @@
   (Σ (x : t) e #:refers-to x)
   (pair (Σ (x : t_0) t_1 #:refers-to x) e_0 e_1 #:refers-to x))
 
+(define-judgment-form infernalizeL
+  #:mode (red I I O)
+  #:contract (red Γ e e)
+
+  [(type-infer Γ e t)
+   ---------------
+   (red Γ (infer e) t)]
+
+  [---------------
+   (red Γ ((λ (x : t) e_0) e_1) (substitute e_0 x e_1))])
+
+(define-judgment-form infernalizeL
+  #:mode (red* I I O)
+  #:contract (red* Γ e e)
+
+  [(red Γ e_0 e_1)
+   ---------------- "Red"
+   (red* Γ e_0 e_1)]
+
+  [(red* Γ t t_0)
+   ----------------------------------------- "Cong-Bind1"
+   (red* Γ (any_b (x : t) e) (any_b (x : t_0) e))]
+
+  [(red* (Γ x : t) e e_0)
+   ----------------------------------------- "Cong-Bind2"
+   (red* Γ (any_b (x : t) e) (any_b (x : t) e_0))]
+
+  [(red* Γ e_0 e_01)
+   ----------------------------------------- "Cong-App1"
+   (red* Γ (e_0 e_1) (e_01 e_1))]
+
+  [(red* Γ e_1 e_11)
+   ----------------------------------------- "Cong-App2"
+   (red* Γ (e_0 e_1) (e_0 e_11))]
+
+  [(red* Γ e e_0)
+   ---------------------------- "Cong-snd"
+   (red* Γ (snd e) (snd e_0))]
+
+  [(red* Γ e e_0)
+   ---------------------------- "Cong-fst"
+   (red* Γ (fst e) (fst e_0))]
+
+  [(red* Γ t t_1)
+   ---------------------------- "Cong-pair1"
+   (red* Γ (pair t e_0 e_1) (pair t_1 e_0 e_1))]
+
+  [(red* Γ e_0 e_01)
+   ---------------------------- "Cong-pair2"
+   (red* Γ (pair t e_0 e_1) (pair t e_01 e_1))]
+
+  [(red* Γ e_1 e_11)
+   ---------------------------- "Cong-pair3"
+   (red* Γ (pair t e_0 e_1) (pair t e_0 e_11))])
+
+(define-judgment-form infernalizeL
+  #:mode (red/io* I O)
+  #:contract (red/io* (Γ e) (Γ e))
+
+  [(red* Γ e e_1)
+   --------------------
+   (red/io* (Γ e) (Γ e_1))])
+
 (define-metafunction infernalizeL
-  [(subst e x_0 e_0)
-   (substitute e x_0 e_0)])
-
-(define (infernalize--> Γ)
-  (term-let ([Γ Γ])
-    (reduction-relation infernalizeL
-      (--> ((λ (x : t) e_0) e_1)
-           (subst e_0 x e_1))
-      (--> (infer e)
-           t
-           (judgment-holds (type-infer Γ e t))))))
-
-(define (infernalize-->* Γ)
-  (compatible-closure (infernalize--> Γ) infernalizeL e))
-
-(define-metafunction infernalizeL
+  reduce : Γ e -> e
   [(reduce Γ e)
-   ,(car (apply-reduction-relation* (infernalize-->* (term Γ)) (term e)))])
+   e_1
+   (where (_ e_1) ,(car (apply-reduction-relation* red/io* (term (Γ e)))))])
 
 (define-judgment-form infernalizeL
   #:mode (convert I I I)
   #:contract (convert Γ e e)
 
-  [(where e_3 (reduce Γ e_0))
-   (where e_3 (reduce Γ e_1))
+  [(where e_2 (reduce Γ e_0))
+   (where e_2 (reduce Γ e_1))
    --------------
    (convert Γ e_0 e_1)])
 
@@ -89,7 +140,7 @@
   [(type-infer Γ e_0 (Π (x : t_1) t))
    (type-check Γ e_1 t_1)
    --------------------------
-   (type-infer Γ (e_0 e_1) (subst t x e_1))]
+   (type-infer Γ (e_0 e_1) (substitute t x e_1))]
 
   [(type-infer Γ e t)
    -----------------------------
@@ -101,7 +152,7 @@
    (type-infer Γ (Σ (x : t_0) t) Type)]
 
   [(type-check Γ e_1 t_1)
-   (type-check Γ e_2 (subst t_2 x e_1))
+   (type-check Γ e_2 (substitute t_2 x e_1))
    (type-infer Γ (Σ (x : t_1) t_2) Type)
    (type-check (Γ x : t_1) t_2 Type)
    -------------------------------------
@@ -113,7 +164,7 @@
 
   [(type-infer Γ e_1 (Σ (x : t_1) t_2))
    -------------------------------------
-   (type-infer Γ (snd e_1) (subst t_2 x (fst e_1)))]
+   (type-infer Γ (snd e_1) (substitute t_2 x (fst e_1)))]
   )
 
 (define-judgment-form infernalizeL
@@ -127,7 +178,6 @@
 
 (module+ test
   (require rackunit)
-  ;; The true typeo
   (define-term Γ-test (((((∅ Unit : Type) unit : Unit) Bool : Type) true : Bool) false : Bool))
 
   (check-true
@@ -139,13 +189,11 @@
   (check-true
    (judgment-holds (type-infer Γ-test Bool Type)))
 
-  (check-equal?
-   (term (reduce Γ-test (infer Bool)))
-   (term Type))
+  (check-true
+   (judgment-holds (red* Γ-test (infer Bool) Type)))
 
-  (check-equal?
-   (term (reduce Γ-test (infer true)))
-   (term Bool)))
+  (check-true
+   (judgment-holds (red* Γ-test (infer true) Bool))))
 
 ;; examples
 (module+ test
@@ -188,14 +236,41 @@
 
   (define-metafunction infernalizeL
     [(let- ([x e]) e_0)
-     ((((let-f (infer e)) e) (infer (λ (x : (infer e)) e_0))) (λ (x : (infer e)) e_0))])
+     ((((let-f (infer e)) e) (λ (x : (infer e)) (infer e_0))) (λ (x : (infer e)) e_0))])
 
-  ;; Need to support this pattern; think that is sufficient
-  (displayln
-   (judgment-holds (type-infer Γ-test (infer (λ (x : (infer true)) x)) A) A))
+  (check-true
+   (judgment-holds (type-check Γ-test (infer (λ (x : (infer true)) x)) Type)))
 
-  (displayln
-   (judgment-holds (type-infer Γ-test (let- ([x true]) x) A) A))
+  (check-true
+   (judgment-holds (type-check Γ-test (λ (x : (infer true)) x) (Π (x : Bool) Bool))))
+
+  (check-true
+   (judgment-holds (type-check Γ-test let-f (Π (x_A : Type)
+                                               (Π (x : x_A)
+                                                  (Π (x_B : (Π (x_0 : x_A) Type))
+                                                     (Π (x_f : (Π (x_1 : x_A) (x_B x_1)))
+                                                        (x_B x))))))))
+
+  (check-true
+   (judgment-holds (type-check Γ-test (let-f (infer true))
+                               (Π (x : Bool)
+                                  (Π (x_B : (Π (x_0 : Bool) Type))
+                                     (Π (x_f : (Π (x_1 : Bool) (x_B x_1)))
+                                        (x_B x)))))))
+
+  (check-true
+   (judgment-holds (type-check Γ-test ((let-f (infer true)) true)
+                               (Π (x_B : (Π (x_0 : Bool) Type))
+                                  (Π (x_f : (Π (x_1 : Bool) (x_B x_1)))
+                                     (x_B true))))))
+
+  (check-true
+   (judgment-holds (type-check Γ-test (λ (x : (infer true)) (infer x)) (Π (x : Bool) Type))))
+
+  (check-true
+   (judgment-holds (type-check Γ-test (((let-f (infer true)) true) (λ (x : (infer true)) (infer x)))
+                               (Π (x_f : (Π (x_1 : Bool) Bool))
+                                  Bool))))
 
   (check-true
    (judgment-holds (type-check Γ-test (let- ([x true]) x) Bool))))
