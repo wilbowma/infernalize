@@ -8,6 +8,7 @@
 
 (define-language infernalizeL
   (e t ::= x
+     Bool true false (if e e e)
      Type
      (infer e)
      (Π (x : t) t) (λ (x : t) e) (e e)
@@ -28,8 +29,11 @@
    ---------------
    (red Γ (infer e) t)]
 
-  [---------------
-   (red Γ ((λ (x : t) e_0) e_1) (substitute e_0 x e_1))])
+  [(red Γ ((λ (x : t) e_0) e_1) (substitute e_0 x e_1))]
+
+  [(red Γ (if true e_1 e_2) e_1)]
+
+  [(red Γ (if false e_1 e_2) e_2)])
 
 (define-judgment-form infernalizeL
   #:mode (red* I I O)
@@ -38,6 +42,10 @@
   [(red Γ e_0 e_1)
    ---------------- "Red"
    (red* Γ e_0 e_1)]
+
+  [(red* Γ e e_1)
+   ------------------------------ "Cong-Infer"
+   (red* Γ (infer e) (infer e_1))]
 
   [(red* Γ t t_0)
    ----------------------------------------- "Cong-Bind1"
@@ -73,7 +81,19 @@
 
   [(red* Γ e_1 e_11)
    ---------------------------- "Cong-pair3"
-   (red* Γ (pair t e_0 e_1) (pair t e_0 e_11))])
+   (red* Γ (pair t e_0 e_1) (pair t e_0 e_11))]
+
+  [(red* Γ e e_0)
+   ---------------------------- "Cong-if1"
+   (red* Γ (if e e_1 e_2) (if e_0 e_1 e_2))]
+
+  [(red* Γ e_1 e_11)
+   ---------------------------- "Cong-if2"
+   (red* Γ (if e e_1 e_2) (if e e_11 e_2))]
+
+  [(red* Γ e_2 e_21)
+   ---------------------------- "Cong-if3"
+   (red* Γ (if e e_1 e_2) (if e e_1 e_21))])
 
 (define-judgment-form infernalizeL
   #:mode (red/io* I O)
@@ -128,6 +148,27 @@
    -------------------------------
    (type-infer Γ Type Type)]
 
+  [(valid Γ)
+   -------------------------
+   (type-infer Γ Bool Type)]
+
+  [(valid Γ)
+   -------------------------
+   (type-infer Γ true Bool)]
+
+  [(valid Γ)
+   --------------------------
+   (type-infer Γ false Bool)]
+
+  [(type-infer Γ e Bool)
+   (type-infer Γ e_1 t)
+   (type-infer Γ e_2 t)
+;   (type-infer Γ e_1 (substitute t x true))
+;   (type-infer Γ e_2 (substitute t x false))
+;   (type-infer (Γ x : Bool) t Type)
+   --------------------------
+   (type-infer Γ (if e e_1 e_2) t)]
+
   [(type-infer (Γ x : t_0) e t)
    -------------------------------------------
    (type-infer Γ (λ (x : t_0) e) (Π (x : t_0) t))]
@@ -178,7 +219,7 @@
 
 (module+ test
   (require rackunit)
-  (define-term Γ-test (((((∅ Unit : Type) unit : Unit) Bool : Type) true : Bool) false : Bool))
+  (define-term Γ-test ((∅ Unit : Type) unit : Unit))
 
   (check-true
    (judgment-holds (type-infer Γ-test true Bool)))
@@ -277,108 +318,201 @@
 
   #|
   Okay, so this works.
+  Goal: no unification, no manipulating derivations (only rules), no unification.
+  Ideally: manipulate only a type and get a simple isomorphism between types and rules.
+
   Now, can we automagically turn function definitions into type rules, and if
-  so, is this some kind of advantage in terms of performance or error reporting?
-  E.g., given the type of let-f:
-  Γ ⊢ let-f : (Π (x_A : Type)
-                (Π (x : x_A)
-                  (Π (x_B : (Π (x_0 : x_A) Type))
-                    (Π (x_f : (Π (x_1 : x_A) (x_B x_1)))
-                      (x_B x)))))
-  Can we automatically derive:
-    Γ ⊢ e : A
-    Γ ⊢ f : (Π (x : A) B)
-    Γ,x:A ⊢ B : Type (redundant)
-    -------------------
-    Γ ⊢ let-f e f : B[e/x]
+  so, is this some kind of advantage in terms of performance, error reporting,
+  or simplicity?
 
-  This would almost separate the concerns of expressing the macros from expressing new typing rules.
+  I think: yes, at least in terms of simplicity.
+  Consider the following type, which expresses the typing rule for dependent let:
 
-  But how do we know which arguments are supposed to be surface and which are not?
-  If this is a modality of some kind, could use some tag on Types, e.g.,:
-    Γ ⊢ let-f : (Π (A : (Inferred Type))
-                  (Π (e : A)
-                    (Π (B : (Inferred (Π (x : A) Type)))
-                      (Π (f : (Π (x : A) (B x)))
-                        (B e)))))
+  Γ ⊢ let-f : (Π (A : Type)
+                (Π (x : A)
+                  (Π (B : (Π (x : A) Type))
+                    (Π (f : (Π (x : A) (B x)))
+                      (B x)))))
 
-  (Hm. But then, how is this different than internalizing unification?)
-
-  Strategy: first, turn the telescope into a typing rule as follows
-
-  ⊢ A : Inferred Type
-  ⊢ e : A
-  ⊢ B : (Inferred (Π (x : A) Type))
-  ⊢ f : Π (x : A) (B x)
-  -----------------------
-  ⊢ let-f A e B f : (B e)
-
-  Next, remove Inferred arguments from the surface syntax
-
-  ⊢ A : Inferred Type
-  ⊢ e : A
-  ⊢ B : (Inferred (Π (x : A) Type))
-  ⊢ f : Π (x : A) (B x)
-  -------------------
-  ⊢ let-f e f : (B e)
-
-  Next, transform Inferred binding types into substitutions
-
-  ⊢ A : Inferred Type
-  ⊢ e : A
-  x' : A ⊢ B : Inferred Type
-  ⊢ f : Π (x : A) B[x/x']
-  -------------------
-  ⊢ let-f e f : B[e/x']
-
-  Remove all Inferred Types
-
-  ⊢ e : A
-  ⊢ f : Π (x : A) B[x/x']
-  -------------------
-  ⊢ let-f e f : B[e/x']
-
-
-  ... So this prevents any strange search, I suppose.
-  But what did that have to do with the infer term?
-  And the resulting syntax is still not the surface syntax.
-  Also, it was all at the meta-level, manipulating derivations.
-  Want to manipulate terms (or, types) as typing rules.
-
-  If we just suppose pattern-based macros, then how does `infer` simplify
-  the resugaring problem:
-
-  Goal: no unification, no manipulating derivations, no unification.
-    (let- ([x e]) e_0) =>
+  And the macro
+    (let ([x e]) e_0) =>
     ((((let-f (infer e)) e) (λ (x : (infer e)) (infer e_0))) (λ (x : (infer e)) e_0))
 
-  Tells us the typing rule is:
-  ⊢ e : (infer e)
-  x : (infer e) ⊢ e_0 : (infer e_0)
-  ---------------------------------
-  ⊢ (let- ([x e]) e_0) : (infer ((((let-f (infer e)) e) (λ (x : (infer e)) (infer e_0))) (λ (x : (infer e)) e_0)))
+  The type of let-f expresses the typing rule of dependent let as a Type.
+  It should tell us that the type of let is:
 
-  (requires some knowledge of telescopes to transform lambdas into binding premises)
+    ⊢ e : A
+    x : A ⊢ e_0 : B
+    ---------------------------------
+    ⊢ (let ([x e]) e_0) : B[e/x]
 
-  Need: some normalization step to remove (infer _)'s from generated typing rules
-  Think the logic is:
-  In a derivation D of the form
-     ⊢ e : (infer e) ....
-     ---------------------
-     .....
-     =>
-     ⊢ e : A .... [A/(infer e)] (fresh A)
-     -----------------------
-     ..... [A/(infer e)]
-  So we get
-  ⊢ e : A
-  x : A ⊢ e_0 : B
-  ---------------------------------
-  ⊢ (let- ([x e]) e_0) : (infer ((((let-f A) e) (λ (x : A) B)) (λ (x : A) e_0)))
+  Here's how to perform the transformation:
+  1. For the macro, give it the final type `infer` of its definition.
+  2. For each sub-expression `e` of the surface macro, add it as a premise with the type `(infer e)`.
+  3. For sub-expressions `e_0` that appear under a telescope `x1 : t1, ..., xn : tn`, such as
+     in the definition of the macro, append the telescope to the environment for
+     `e_0` in the premise so we get `x1 : t1,...,xn : tn ⊢ e_0`.
+     For example, in the above example, `e_0` appears under the telescope `x :
+     (infer e)`, so we get the premise `x : (infer e) ⊢ e_0`.
+  4. Replace each instance of `(infer e)` with a fresh name `A`.
+     If that `(infer e)` is itself under a telescope `x : t ...`, replace it by
+     an application of `(A x ...)`
+  5. From the premises of the type rule, generate telescope θ, replacing any
+     pattern variable `e` from the premises that appear under a telescope `x : t ...`
+     by `(e x ...)` in the result type.
+  6. Evaluate the output of the type rule under θ
+  7. If the output type is of the form `(A e ...)`, where x : B ... ⊢ A : Type, rewrite
+     `(A e ...)` to a substitution `A[e .../x ...]
+
+  Step-by-step:
+  1.
+     ---------------------------------
+     ⊢ (let ([x e]) e_0) : (infer ((((let-f (infer e)) e) (λ (x : (infer e)) (infer e_0))) (λ (x : (infer e)) e_0)))
+
+  2.
+    ⊢ e : (infer e)
+    ⊢ e_0 : (infer e_0)
+    ---------------------------------
+    ⊢ (let ([x e]) e_0) : (infer ((((let-f (infer e)) e) (λ (x : (infer e)) (infer e_0))) (λ (x : (infer e)) e_0)))
+  3.
+    ⊢ e : (infer e)
+    x : (infer e) ⊢ e_0 : (infer e_0)
+    ---------------------------------
+    ⊢ (let ([x e]) e_0) : (infer ((((let-f (infer e)) e) (λ (x : (infer e)) (infer e_0))) (λ (x : (infer e)) e_0)))
+  4.
+    ⊢ e : A
+    x : A ⊢ e_0 : B
+    ---------------------------------
+    ⊢ (let ([x e]) e_0) : (infer ((((let-f A) e) (λ (x : A) (B x))) (λ (x : A) e_0)))
+  5.
+    ⊢ e : A
+    x : A ⊢ e_0 : B
+    ---------------------------------
+    ⊢ (let ([x e]) e_0) : (infer ((((let-f A) e) (λ (x : A) (B x))) (λ (x : A) (e_0 x))))
+
+    θ = (A : Type) (e : A) (B : (Π (x : A) Type)) (e_0 : (Π (x : A) (B x)))
   |#
   ;; Need a little work on transforming telescopes
-  (displayln
-   (term (reduce ((((∅ A : Type) e : A) B : (Π (x : A) Type)) e_0 : (B e))
-                 (infer ((((let-f A) e) (λ (x : A) (B e))) (λ (x : A) e_0))))))
+  (check-equal?
+   (term (B e))
+   (term (reduce ((((∅ A : Type) e : A) B : (Π (x : A) Type)) e_0 : (Π (x : A) (B x)))
+                 (infer ((((let-f A) e) (λ (x : A) (B x))) (λ (x : A) (e_0 x)))))))
 
-  )
+  #|
+  6.
+    ⊢ e : A
+    x : A ⊢ e_0 : B
+    ---------------------------------
+    ⊢ (let ([x e]) e_0) : (B e)
+  7.
+    ⊢ e : A
+    x : A ⊢ e_0 : B
+    ---------------------------------
+    ⊢ (let ([x e]) e_0) : B[e/x]
+
+  Key telescope isomorphisms:
+    x : A ⊢ B : Type <-> B : (Π (x : A) Type)
+    x : A ⊢ e : B    <-> ⊢ e : (Π (x : A) (B x))
+    (λ (x : A) e)    <-> (λ (x : A) (e x))
+
+
+
+  What about the simpler macro?
+    (let ([x e]) e_0) => ((λ (x : (infer e)) e_0) e)
+
+  1.
+    ---------------------------------
+    ⊢ (let ([x e]) e_0) : (infer ((λ (x : (infer e)) e_0) e))
+  2.
+    ⊢ e : (infer e)
+    ⊢ e_0 : (infer e_0)
+    ---------------------------------
+    ⊢ (let ([x e]) e_0) : (infer ((λ (x : (infer e)) e_0) e))
+  3.
+    ⊢ e : (infer e)
+    x : (infer e) ⊢ e_0 : (infer e_0)
+    ---------------------------------
+    ⊢ (let ([x e]) e_0) : (infer ((λ (x : (infer e)) e_0) e))
+  4.
+    ⊢ e : A
+    x : A ⊢ e_0 : B
+    ---------------------------------
+    ⊢ (let ([x e]) e_0) : (infer ((λ (x : A) e_0) e))
+  5.
+    ⊢ e : A
+    x : A ⊢ e_0 : B
+    ---------------------------------
+    ⊢ (let ([x e]) e_0) : (infer ((λ (x : A) (e_0 x)) e))
+
+    Θ = (A : Type) (e : A) (B : (Π (x : A) Type)) (e_0 : (Π (x : A) (B x)))
+  |#
+  (check-equal?
+   (term (B e))
+   (term (reduce ((((∅ A : Type) e : A) B : (Π (x : A) Type)) e_0 : (Π (x : A) (B x)))
+                 (infer ((λ (x : A) (e_0 x)) e)))))
+  #|
+  6.
+    ⊢ e : A
+    x : A ⊢ e_0 : B
+    ---------------------------------
+    ⊢ (let ([x e]) e_0) : (B e)
+  7.
+    ⊢ e : A
+    x : A ⊢ e_0 : B
+    ---------------------------------
+    ⊢ (let ([x e]) e_0) : B[e/x]
+
+  This derives the typing rule, but with considerable less effort.
+  I did not need to write out the typing rule explicitly in the absurd high-order way.
+  Instead, I write the obvious sugar, and get the right typing rule.
+
+
+  Let's true or
+  |#
+  (define-metafunction infernalizeL
+    [(or e_1 e_2)
+     (let ([x e_1])
+       (if x x e_2))])
+
+  #|
+  (or e_1 e_2) => (let ([x e_1]) (if x x e_2))
+
+  1.
+    ---------------------------------
+    ⊢ (or e_1 e_2) : (infer (let ([x e_1]) (if x x e_2)))
+  2.
+    ⊢ e_1 : (infer e_1)
+    ⊢ e_2 : (infer e_2)
+    ---------------------------------
+    ⊢ (or e_1 e_2) : (infer (let ([x e_1]) (if x x e_2)))
+  3.  (nop)
+  4.
+    ⊢ e_1 : A
+    ⊢ e_2 : B
+    ---------------------------------
+    ⊢ (or e_1 e_2) : (infer (let ([x e_1]) (if x x e_2)))
+  5.
+    ⊢ e_1 : A
+    ⊢ e_2 : B
+    ---------------------------------
+    ⊢ (or e_1 e_2) : (infer (let ([x e_1]) (if x x e_2)))
+
+    Θ = (A : Type) (e_1 : A) (B : Type) (e_2 : B)
+  |#
+  (check-equal?
+   (term (infer (if e_1 e_1 e_2)))
+   (term (reduce ((((∅ A : Type) e_1 : A) B : Type) e_2 : B)
+                 (infer (let ([x e_1]) (if x x e_2))))))
+  ;; Failure. `or` seems to require unification and "bubbling up" constraints from the derivation.
+  ;; Even eta-expansion doesn't quite solve the problem, although it reduces
+  ;; the problem to local unification instead of far-away-in-derivation unification.
+  (define-metafunction infernalizeL
+    [(or- e_1 e_2)
+     ((((λ (A : Type)
+         (λ (x1 : A)
+           (λ (x2 : A)
+             (if x1 x1 x2))))
+       (infer e_1))
+       e_1)
+      e_2)])
+)
