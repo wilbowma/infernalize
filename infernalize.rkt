@@ -643,3 +643,112 @@
      Perhaps some other internalization of performance measures is the best way
      to approach this.
   |#
+
+
+  ;;; Assorted thoughts
+
+  ;; -- Computing type rules?
+
+  #|
+  I'm stupid.
+  If computation is meant to help us compute the type rules, then why am I not
+  using computation to compute types?
+  The typing rule should express the static type arguments with type-leve λ, and
+  the term arguments as Π.
+  |#
+  (define-term or-bool-type-constr
+    (λ (B : Type)
+      (λ (p : (= B Bool))
+        (Π (x1 : Bool)
+           (Π (x2 : B)
+              Bool)))))
+
+  #|
+  Now I would like to express the typing rule for `or` as
+    or : ((or-bool-type-constr (infer e2) (refl (infer e2))))
+  ... this isn't quite right either.
+  |#
+  #;(define-term or-bool-f2
+    (λ (B : Type)
+      (λ (x1 : Bool)
+      )))
+
+  ;; -- Dual to `infer`
+
+  #|
+  `infer` has an interesting property: it translates λ into Π.
+  It's always annoyed me a bit that there are two forms of quantification.
+  (although I guess some presentations avoid this...)
+  Should there by an analogous term that translates Π into λ?
+  `refni`
+
+  ⊢ A : Type
+  -------------
+  ⊢ (refni A) : A
+
+
+  ⊢ e : A
+  -------------
+  ⊢ (refni A) ≡ e
+
+  Well. That's absurd. And undecidable.
+  But interesting... an internalization of proof search?
+  ...
+  Or, maybe it's an internalization of a "hole", or axiomitization?
+  But isn't that what variables are?
+  Why is this different?
+
+  Does have the effect of translating Π to λ
+
+  Γ ⊢ (λ (x : A) (refni B)) : (Π (x : A) B)
+  -------------
+  Γ ⊢ (refni (Π (x : A) B)) ≡ (λ (x : A) (refni B))
+
+  Probably could recover soundness with a modality.
+
+  Γ ⊢ A : Type
+  -------------
+  Γ ⊢ (posit A) : (Suppose A)
+
+  Γ ⊢ e1 : (Suppose A)
+  Γ, x : A ⊢ e2 : (Suppose B)
+  -------------
+  Γ ⊢ (bind (x e1) e2) : (Suppose B)
+
+  Γ ⊢ e : A
+  ---------------------------
+  Γ ⊢ (return e) : (Suppose A)
+
+  Γ ⊢ e1 : (Suppose A)
+  Γ ⊢ e2 : A
+  -----------------------
+  Γ ⊢ (prove e1 e2) : A
+
+  --------------------
+  Γ ⊢ (prove (posit A) e2) ≡ e2
+
+  --------------------
+  Γ ⊢ (prove (return e1) e2) ≡ e1
+
+  --------------------
+  Γ ⊢ (prove (bind (x e1) e2) e3) ≡ (bind (x e1) e2)
+  ... not sure
+
+
+  `prove` looks like a very odd form of application.
+
+  I feel like `bind` should be:
+
+  Γ ⊢ e1 : (Suppose A)
+  Γ, x : A ⊢ e2 : B
+  -------------
+  Γ ⊢ (bind (x e1) e2) : (Suppose B)
+
+  But this... this must be unsound.
+
+  All of this (`infer` included) looks like something I'm seen before.
+  Need to do some reading.
+  |#
+
+
+)
