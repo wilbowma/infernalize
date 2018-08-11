@@ -751,4 +751,29 @@
   |#
 
 
+  #|
+  Back to first principles.
+
+  What is a primitive?
+  In a language without effects? Simply a function.
+  But as soon as we have any effect (e.g., performance), not so simple.
+  It's functional behavior is a function, but its other aspects?
+
+  What is a typing rule for a primitive?
+  The type of the function (i.e., a Π type), describing the types and scope of
+  each sub-expression, and culminating in a result type for the expression when
+  fully instantiated.
+
+  f : Π (x : A) ... B
+
+  ≡
+
+  ⊢ e : A[e ...-1 /x ...-1] ...
+  ---------
+  ⊢ (f e ...) : B[e .../x ...]
+
+  Only true if types are expressive as judgments, and dependent type theory is close
+
+  But this ignores "effects"? E.g. the annotation burden, the effect of inference or unification...?
+  |#
 )
