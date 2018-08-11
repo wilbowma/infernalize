@@ -260,6 +260,46 @@
    -----------------
    (type-check Γ e t)])
 
+#|
+Soundness Proof:
+
+Give a model in MLTT with identity, bool, Σ as follows:
+
+Γ ⊢ e : A
+--------------------
+Γ ⊢ (infer e) : Type -> Γ ⊢ A : Type
+
+And, since the infernalize reduction and equivalence are mutually defined with
+typing, this is complicated.
+But the MLTT need't be mutually defined.
+
+Lemma: (e[e'/x])+ ≡ e+[e'+/x]
+  By induction on Γ ⊢ e : A, which exists by definition of +
+
+  - Γ ⊢ (infer e) : Type
+  Show ((infer e)[e'/x])  ≡ A[e'+/x]
+      = (infer (e[e'/x]))+
+      = (A[e'/x])+ (by some substitution property)
+        ≡ by induction
+
+Lemma: e -> e' then e+ ->* e'+
+  By cases on e -> e'
+  - Γ ⊢ (infer e) : Type -> A
+    Show A+ ->* A+, qed
+    Note that e'+ is defined since Γ ⊢ A : Type is part of the derivation of e -> e', in this case.
+    For other cases, we can appeal to preservation.
+
+...
+Lemma: Type Preservation
+  Γ ⊢ e : A then (Γ ⊢ e : A)+
+  - Γ ⊢ (infer e) : Type
+    Show Γ+ ⊢ A+ : Type, by induction since Γ ⊢ A : Type holds in the derivation.
+
+Lemma: False Preservation
+  ⊢ Πα:Type.α : Type then (⊢ Πα:Type.α : Type)+ = ⊢ Πα:Type.α : Type
+
+|#
+
 (module+ test
   (require rackunit)
   (define-term Γ-test ((∅ Unit : Type) unit : Unit))
