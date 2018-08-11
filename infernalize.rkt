@@ -11,6 +11,7 @@
      Bool true false (if e e e)
      Type
      (infer e)
+     (= e e) (refl e) (subst e e)
      (Π (x : t) t) (λ (x : t) e) (e e)
      (Σ (x : t) t) (pair (Σ (x : t) t) e e) (fst e) (snd e))
   (x   ::= variable-not-otherwise-mentioned)
@@ -33,7 +34,9 @@
 
   [(red Γ (if true e_1 e_2) e_1)]
 
-  [(red Γ (if false e_1 e_2) e_2)])
+  [(red Γ (if false e_1 e_2) e_2)]
+
+  [(red Γ (subst (refl t) e) e)])
 
 (define-judgment-form infernalizeL
   #:mode (red* I I O)
@@ -46,6 +49,26 @@
   [(red* Γ e e_1)
    ------------------------------ "Cong-Infer"
    (red* Γ (infer e) (infer e_1))]
+
+  [(red* Γ e_1 e_11)
+   ------------------------------ "Cong-=1"
+   (red* Γ (= e_1 e_2) (= e_11 e_2))]
+
+  [(red* Γ e_2 e_21)
+   ------------------------------ "Cong-=2"
+   (red* Γ (= e_1 e_2) (= e_1 e_21))]
+
+  [(red* Γ e e_1)
+   ------------------------------ "Cong-refl"
+   (red* Γ (refl e) (refl e_1))]
+
+  [(red* Γ t t_1)
+   ------------------------------ "Cong-subst1"
+   (red* Γ (subst t e) (subst t_1 e))]
+
+  [(red* Γ e e_1)
+   ------------------------------ "Cong-subst2"
+   (red* Γ (subst t e) (subst t e_1))]
 
   [(red* Γ t t_0)
    ----------------------------------------- "Cong-Bind1"
@@ -115,8 +138,14 @@
 
   [(where e_2 (reduce Γ e_0))
    (where e_2 (reduce Γ e_1))
-   --------------
-   (convert Γ e_0 e_1)])
+   -------------- "≡-red*"
+   (convert Γ e_0 e_1)]
+
+  [------------------------ "≡-η1-bool"
+   (convert Γ (if e t t) t)]
+
+  [------------------------ "≡-η2-bool"
+   (convert Γ t (if e t t))])
 
 (define-judgment-form infernalizeL
   #:mode (valid I)
@@ -160,20 +189,34 @@
    --------------------------
    (type-infer Γ false Bool)]
 
-  [(type-infer Γ e Bool)
-   (type-infer Γ e_1 t)
-   (type-infer Γ e_2 t)
-;   (type-infer Γ e_1 (substitute t x true))
-;   (type-infer Γ e_2 (substitute t x false))
+  [(type-check Γ e Bool)
+;   (type-infer Γ e_1 t)
+;   (type-infer Γ e_2 t)
+   (type-infer Γ e_1 t_1)
+   (type-infer Γ e_2 t_2)
 ;   (type-infer (Γ x : Bool) t Type)
    --------------------------
-   (type-infer Γ (if e e_1 e_2) t)]
+   (type-infer Γ (if e e_1 e_2) (if e t_1 t_2))]
+
+  [(type-check Γ e_1 Type)
+   (type-check Γ e_2 Type)
+   --------------------------
+   (type-infer Γ (= e_1 e_2) Type)]
+
+  [(type-check Γ e Type)
+   --------------------------
+   (type-infer Γ (refl e) (= e e))]
+
+  [(type-infer Γ t (= t_1 t_2))
+   (type-infer Γ e t_1)
+   --------------------------
+   (type-infer Γ (subst t e) t_2)]
 
   [(type-infer (Γ x : t_0) e t)
    -------------------------------------------
    (type-infer Γ (λ (x : t_0) e) (Π (x : t_0) t))]
 
-  [(type-infer Γ t_0 Type)
+  [(type-check Γ t_0 Type)
    (type-check (Γ x : t_0) t Type)
    -------------------------------------
    (type-infer Γ (Π (x : t_0) t) Type)]
@@ -187,14 +230,14 @@
    -----------------------------
    (type-infer Γ (infer e) Type)]
 
-  [(type-infer Γ t_0 Type)
+  [(type-check Γ t_0 Type)
    (type-check (Γ x : t_0) t Type)
    -------------------------------------
    (type-infer Γ (Σ (x : t_0) t) Type)]
 
   [(type-check Γ e_1 t_1)
    (type-check Γ e_2 (substitute t_2 x e_1))
-   (type-infer Γ (Σ (x : t_1) t_2) Type)
+   (type-check Γ (Σ (x : t_1) t_2) Type)
    (type-check (Γ x : t_1) t_2 Type)
    -------------------------------------
    (type-infer Γ (pair (Σ (x : t_1) t_2) e_1 e_2) (Σ (x : t_1) t_2))]
@@ -506,7 +549,7 @@
   ;; Failure. `or` seems to require unification and "bubbling up" constraints from the derivation.
   ;; Even eta-expansion doesn't quite solve the problem, although it reduces
   ;; the problem to local unification instead of far-away-in-derivation unification.
-  (define-metafunction infernalizeL
+  #;(define-metafunction infernalizeL
     [(or- e_1 e_2)
      ((((λ (A : Type)
          (λ (x1 : A)
@@ -515,4 +558,88 @@
        (infer e_1))
        e_1)
       e_2)])
-)
+  #|
+  What is the type of or?
+  I don't really want unification, I want to explicitly express an equality
+  about the types of e_1 and e_2.
+  |#
+  (define-term or-dep-f
+    (λ (B : Type)
+      (λ (x1 : Bool)
+        (λ (x2 : B)
+          (if x1 x1 x2)))))
+
+  (check-true
+   (judgment-holds (type-check ∅ or-dep-f (Π (B : Type)
+                                             (Π (x1 : Bool)
+                                                (Π (x2 : B)
+                                                   (if x1 Bool B)))))))
+
+  (define-metafunction infernalizeL
+    [(or-dep e_1 e_2)
+     (((or-dep-f (infer e_2)) e_1) e_2)])
+
+  (check-equal?
+   (term true)
+   (term (reduce ∅ (or-dep true false))))
+
+  (check-true
+   (judgment-holds (type-check ∅ (or-dep true false) Bool)))
+
+  (check-equal?
+   (term false)
+   (term (reduce ∅ (or-dep false false))))
+
+  (check-true
+   (judgment-holds (type-check ∅ (or-dep false false) Bool)))
+
+  (check-equal?
+   (term unit)
+   (term (reduce Γ-test (or-dep false unit))))
+
+  (check-true
+   (judgment-holds (type-check Γ-test (or-dep false unit) Unit)))
+
+  (check-true
+   (judgment-holds (type-check (Γ-test x : Bool) (or-dep x unit) (if x Bool Unit))))
+
+  ;;
+  (define-term or-bool-f
+    (λ (B : Type)
+      (λ (x1 : Bool)
+        (λ (p : (= B Bool))
+          (λ (x2 : B)
+            (if x1 x1 (subst p x2)))))))
+
+  (define-metafunction infernalizeL
+    [(or-bool e_1 e_2)
+     ((((or-bool-f (infer e_2)) e_1) (refl (infer e_2))) e_2)])
+
+  (check-true
+   (judgment-holds (type-check ∅ or-bool-f (Π (B : Type)
+                                              (Π (x1 : Bool)
+                                                 (Π (p : (= B Bool))
+                                                    (Π (x2 : B)
+                                                       Bool)))))))
+  #|
+  Hm. Problems:
+  1. Running into limitations of Redex's type system implementation.
+     Either need proper bi-directional, or additional annotations.
+     Until then, η equality doesn't get congruence for free.
+     Already had to explicitly write congruence rules for reduction.
+     Is there a good way to automatically get congruence while not losing context?
+  2. Not sure what I think about necessity of explicit equalities.
+     It does explicitly express the type rule, I think... but its awful
+     annotation heavy.
+     Unification seems pretty useful.
+     At least this is pretty proof theoretic, I guess.
+  3. The explicit expansion with type annotations also has implication on performance.
+     Maybe should separate annotation from functions/abstraction, e.g., add an
+     annotation form `(e : A)`.
+     This would have a nice analogy with internalizing `infer`.
+     OTOH, this quickly breaks the isomorphism between types and typing rules;
+     instead terms become typing rules?
+     That doesn't seem right...
+     Perhaps some other internalization of performance measures is the best way
+     to approach this.
+  |#
