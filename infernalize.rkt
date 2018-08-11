@@ -647,6 +647,41 @@
 
   ;;; Assorted thoughts
 
+  ;; -- What is my problem with unification?
+  #|
+  (Speculative, should model unification)
+
+  Well, it is a meta- construct with only semantics via elaboration.
+
+  ... But so are macros?
+
+  Yeah, but those are local transformations.
+
+  So it's a problem of a global transformation?
+
+  I suppose.
+
+  What of compiler passes? CPS and closure conversion are global?
+
+  No, those are local; sure, everything has to be transformed, but each
+  transform is local.
+  Heap allocation maybe is global, since it requires threading through the heap
+  the translation?
+
+  "Threading"? That doesn't seem to be about global vs local, but about state?
+
+  Perhaps, or perhaps state it the means by which we make something local that is global?
+  Anyway, unification feature the same problem---must thread through constraints.
+
+  Is that inherently bad?
+
+  In the same way that global state is bad.
+  Global state makes a program hard to reason about, global semantics make a
+  semantics hard to reason about it.
+  `infer` is much simpler to reason about, and combined with simple pattern
+  based macros, seems to be quite useful.
+  |#
+
   ;; -- Computing type rules?
 
   #|
