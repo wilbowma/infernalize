@@ -673,7 +673,8 @@
       (λ (x1 : Bool)
       )))
 
-  ;; -- Dual to `infer`
+  ;; -- Dual to `infer`?
+  ;; TLDR: I don't think this is useful, except for its weird side effect.
 
   #|
   `infer` has an interesting property: it translates λ into Π.
