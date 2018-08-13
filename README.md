@@ -119,11 +119,11 @@ is safe.
 Ultimately, I want to be able to give types to macros.
 I think being able to calculate a typing rule in a type theory is a good first
 step.
-To do that, I want that the calculation to be reflected directly in the term, so
-the we can calculate in the object language (the terms of `infernalize`), and
-the as a final step, translate to a the typing rule.
-Unfortunately, so far too much of this calculation still happens over the typing
-rule.
+To do that, I want the calculation to be reflected directly in the term, so
+we can calculate in the object language (the terms of `infernalize`), and then,
+as a final step, translate to a typing rule.
+Unfortunately, too much of this calculation still happens over the typing rule;
+the term or type is not a good enough representation of the typing rule.
 
 In the above example, we generated a typing rule for `let-` first, and then
 started modifying it.
@@ -131,17 +131,19 @@ Instead, I would prefer to start from, e.g., the type of `let-` and the macro
 definition for `let`, then perform some calculations, after which we end up with
 exactly the typing rule for `let`.
 
-1. ```
-let- : Π(A:Type, e:A, B:Πx:A.Type, f:Πx:A.B x). (B e)
-(let x = e in e') => let- (infer e) e (λx:(infer e). (infer e') (λx:(infer e). e')
-```
+1.
+  ```
+  let- : Π(A:Type, e:A, B:Πx:A.Type, f:Πx:A.B x). (B e)
+  (let x = e in e') => let- (infer e) e (λx:(infer e). (infer e') (λx:(infer e). e')
+  ```
 2. ???
-3. ```
-Γ ⊢ e : A
-Γ,x:A ⊢ e': B
-------------------------
-Γ ⊢ let x = e in e' : B[e/x]
-```
+3.
+  ```
+  Γ ⊢ e : A
+  Γ,x:A ⊢ e': B
+  ------------------------
+  Γ ⊢ let x = e in e' : B[e/x]
+  ```
 
-I think step two requires some control partial evaluation, but I'm not quite
+I think step 2. requires some control over partial evaluation, but I'm not quite
 sure what that looks like yet.
